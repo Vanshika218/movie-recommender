@@ -1,3 +1,7 @@
 flask==3.0.3
 scikit-surprise==1.1.4
+<<<<<<< HEAD
 gunicorn
+=======
+gunicorn
+>>>>>>> bd5386b33a9e61f83e9bdfadff08d6af7c072c4b
