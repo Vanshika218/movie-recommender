@@ -1,3 +1,10 @@
+# Pre-download MovieLens 100k dataset
+RUN mkdir -p ~/.surprise_data/ml-100k/ml-100k && \
+    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.data https://files.grouplens.org/datasets/movielens/ml-100k/u.data && \
+    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.item https://files.grouplens.org/datasets/movielens/ml-100k/u.item && \
+    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.user https://files.grouplens.org/datasets/movielens/ml-100k/u.user && \
+    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.genre https://files.grouplens.org/datasets/movielens/ml-100k/u.genre
+
 FROM python:3.10-slim
 
 WORKDIR /app
