@@ -10,9 +10,16 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
+# Copy requirements
 COPY requirements.txt .
+
+# Upgrade pip
 RUN pip install --upgrade pip
+
+# Install compatible numpy and scipy first
+RUN pip install numpy==1.23.5 scipy==1.9.3
+
+# Now install all project dependencies
 RUN pip install -r requirements.txt
 
 # Copy the rest of your project
