@@ -1,25 +1,28 @@
-# Use Python 3.10 (works with scikit-surprise)
 FROM python:3.10-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies for scikit-surprise
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
+# Copy requirements
 COPY requirements.txt .
+
+# Upgrade pip and install dependencies
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-# 🔹 Pre-download Surprise dataset so it doesn’t ask during runtime
+# Pre-download the MovieLens dataset to avoid runtime download
 RUN python -c "from surprise import Dataset; Dataset.load_builtin('ml-100k')"
 
-# Copy the rest of your project
+# Copy your Flask app
 COPY . .
 
-# Start the Flask app with gunicorn
-CMD ["gunicorn", "app:app"]
+# Expose port
+EXPOSE 5000
+
+# Run the app
+CMD ["python", "app.py"]
