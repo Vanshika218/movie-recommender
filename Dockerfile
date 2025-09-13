@@ -10,14 +10,13 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements and install
 COPY requirements.txt .
-
-# Upgrade pip
 RUN pip install --upgrade pip
-
-# Now install all project dependencies
 RUN pip install -r requirements.txt
+
+# 🔹 Pre-download Surprise dataset so it doesn’t ask during runtime
+RUN python -c "from surprise import Dataset; Dataset.load_builtin('ml-100k')"
 
 # Copy the rest of your project
 COPY . .
