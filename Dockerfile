@@ -1,18 +1,14 @@
-# Pre-download MovieLens 100k dataset
-RUN mkdir -p ~/.surprise_data/ml-100k/ml-100k && \
-    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.data https://files.grouplens.org/datasets/movielens/ml-100k/u.data && \
-    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.item https://files.grouplens.org/datasets/movielens/ml-100k/u.item && \
-    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.user https://files.grouplens.org/datasets/movielens/ml-100k/u.user && \
-    wget -q -O ~/.surprise_data/ml-100k/ml-100k/u.genre https://files.grouplens.org/datasets/movielens/ml-100k/u.genre
-
+# Use Python 3.10 slim
 FROM python:3.10-slim
 
+# Set working directory
 WORKDIR /app
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -22,8 +18,12 @@ COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-# Pre-download the MovieLens dataset to avoid runtime download
-RUN python -c "from surprise import Dataset; Dataset.load_builtin('ml-100k')"
+# Pre-download MovieLens 100k dataset
+RUN mkdir -p /root/.surprise_data/ml-100k/ml-100k && \
+    wget -q -O /root/.surprise_data/ml-100k/ml-100k/u.data https://files.grouplens.org/datasets/movielens/ml-100k/u.data && \
+    wget -q -O /root/.surprise_data/ml-100k/ml-100k/u.item https://files.grouplens.org/datasets/movielens/ml-100k/u.item && \
+    wget -q -O /root/.surprise_data/ml-100k/ml-100k/u.user https://files.grouplens.org/datasets/movielens/ml-100k/u.user && \
+    wget -q -O /root/.surprise_data/ml-100k/ml-100k/u.genre https://files.grouplens.org/datasets/movielens/ml-100k/u.genre
 
 # Copy your Flask app
 COPY . .
