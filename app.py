@@ -1,105 +1,127 @@
 from flask import Flask, render_template, request
-from surprise import SVD, Dataset
-from surprise.model_selection import train_test_split
 from collections import defaultdict
 import os
+import pandas as pd
+import json
 import requests
-import re
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 
 app = Flask(__name__)
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY", "6cf8c75b96fccf52ba6b8c310aafe1d3")
+# Load and prepare data
+movies_df = pd.read_csv('tmdb_5000_movies.csv')
+credits_df = pd.read_csv('tmdb_5000_credits.csv')
 
-# Clean MovieLens titles
-def clean_title(title):
-    title = re.sub(r"\(\d{4}\)", "", title).strip()
-    if ", The" in title:
-        title = "The " + title.replace(", The", "")
-    elif ", An" in title:
-        title = "An " + title.replace(", An", "")
-    elif ", A" in title:
-        title = "A " + title.replace(", A", "")
-    return title.strip()
+# Merge on movie ID
+df = movies_df.merge(credits_df, left_on='id', right_on='movie_id', how='inner')
+df = df.drop(columns=['movie_id', 'title_y']).rename(columns={'title_x': 'title'})
 
-# Fetch movie details from TMDb
-def get_movie_details(title):
+# Extract director from crew
+def get_director(x):
     try:
-        query = clean_title(title)
+        crew = json.loads(x)
+        for i in crew:
+            if i['job'] == 'Director':
+                return i['name']
+        return ''
+    except:
+        return ''
+
+df['director'] = df['crew'].apply(get_director)
+
+# Extract top 3 cast
+def get_top_cast(x, n=3):
+    try:
+        cast = json.loads(x)
+        return [i['name'] for i in cast[:n]]
+    except:
+        return []
+
+df['top_cast'] = df['cast'].apply(get_top_cast)
+
+# Extract lists from JSON strings
+def get_list(x):
+    try:
+        items = json.loads(x)
+        return [i['name'] for i in items]
+    except:
+        return []
+
+df['genres_list'] = df['genres'].apply(get_list)
+df['keywords_list'] = df['keywords'].apply(get_list)
+
+# Create feature soup for similarity
+def create_soup(x):
+    overview = str(x['overview']) if pd.notnull(x['overview']) else ''
+    return ' '.join(x['genres_list']) + ' ' + ' '.join(x['keywords_list']) + ' ' + overview + ' ' + x['director'] + ' ' + ' '.join(x['top_cast'])
+
+df['soup'] = df.apply(create_soup, axis=1)
+
+# TF-IDF and cosine similarity
+tfidf = TfidfVectorizer(stop_words='english')
+tfidf_matrix = tfidf.fit_transform(df['soup'])
+cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
+
+# Title to index mapping
+indices = pd.Series(df.index, index=df['title']).drop_duplicates()
+
+# Get similar movies
+def get_recommendations(title, n=50):
+    if title not in indices:
+        return []
+    idx = indices[title]
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sim_scores[1:n+1]  # Exclude self
+    movie_indices = [i[0] for i in sim_scores]
+    return df['title'].iloc[movie_indices]
+
+# Get movie details from DataFrame and TMDB API
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", "6cf8c75b96fccf52ba6b8c310aafe1d3")
+def get_movie_details(title):
+    if title not in df['title'].values:
+        return "No description found.", "https://via.placeholder.com/300x200?text=No+Poster", "Unknown"
+    movie = df[df['title'] == title].iloc[0]
+    summary = movie['overview'] if pd.notnull(movie['overview']) else "No description available."
+    genre_text = ", ".join(movie['genres_list']) if movie['genres_list'] else "Unknown"
+    try:
+        query = title
         url = "https://api.themoviedb.org/3/search/movie"
         params = {"api_key": TMDB_API_KEY, "query": query}
         response = requests.get(url, params=params)
         data = response.json()
-
         if data["results"]:
-            movie = data["results"][0]
-            summary = movie.get("overview", "No description available.")
-            poster_path = movie.get("poster_path")
+            poster_path = data["results"][0].get("poster_path")
             poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else "https://via.placeholder.com/300x200?text=No+Poster"
-
-            # Get genres
-            movie_id = movie["id"]
-            details_url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-            details_params = {"api_key": TMDB_API_KEY}
-            details_resp = requests.get(details_url, params=details_params).json()
-            genres = [g["name"] for g in details_resp.get("genres", [])]
-            genre_text = ", ".join(genres) if genres else "Unknown"
-
-            return summary, poster_url, genre_text
         else:
-            return "No description found.", "https://via.placeholder.com/300x200?text=No+Poster", "Unknown"
-    except Exception:
-        return "Error retrieving description.", "https://via.placeholder.com/300x200?text=Error", "Unknown"
-
-# Load MovieLens data
-data = Dataset.load_builtin('ml-100k')
-trainset, testset = train_test_split(data, test_size=0.25)
-algo = SVD()
-algo.fit(trainset)
-
-# Movie ID -> Name
-movie_names = {}
-path = os.path.expanduser("~/.surprise_data/ml-100k/ml-100k/u.item")
-with open(path, encoding='ISO-8859-1') as f:
-    for line in f:
-        parts = line.strip().split('|')
-        movie_id, movie_name = parts[0], parts[1]
-        movie_names[movie_id] = movie_name
-
-# Get top N predictions
-def get_top_n(predictions, n=50):
-    top_n = defaultdict(list)
-    for uid, iid, true_r, est, _ in predictions:
-        top_n[uid].append((iid, est))
-    for uid, user_ratings in top_n.items():
-        user_ratings.sort(key=lambda x: x[1], reverse=True)
-        top_n[uid] = user_ratings[:n]
-    return top_n
-
-predictions = algo.test(testset)
-top_n = get_top_n(predictions, n=50)
+            poster_url = "https://via.placeholder.com/300x200?text=No+Poster"
+    except Exception as e:
+        print(f"TMDB API error for {title}: {e}")  # Debug
+        poster_url = "https://via.placeholder.com/300x200?text=Error"
+    return summary, poster_url, genre_text
 
 @app.route("/", methods=["GET", "POST"])
 def home():
     recommendations = []
     if request.method == "POST":
-        user_id = request.form.get("user_id")
+        movie_title = request.form.get("movie_title")
         selected_genre = request.form.get("genre")
-
-        if user_id in top_n:
+        print(f"Received movie_title: {movie_title}, genre: {selected_genre}")  # Debug
+        if movie_title:
+            similar_titles = get_recommendations(movie_title, n=50)
+            print(f"Similar titles: {similar_titles.tolist()}")  # Debug
             count = 0
-            for iid, rating in top_n[user_id]:
+            for sim_title in similar_titles:
                 if count >= 5:
                     break
-                name = movie_names[iid]
-                summary, poster, genre_text= get_movie_details(name)
-
-                # Filter based on user selection
-                if (selected_genre.lower() in genre_text.lower()):
-                    recommendations.append((name, rating, summary, poster, genre_text))
-                    count += 1
-
+                summary, poster, genre_text = get_movie_details(sim_title)
+                if selected_genre and selected_genre.lower() not in genre_text.lower():
+                    continue
+                rating = df[df['title'] == sim_title]['vote_average'].iloc[0] if pd.notnull(df[df['title'] == sim_title]['vote_average'].iloc[0]) else "N/A"
+                recommendations.append((sim_title, rating, summary, poster, genre_text))
+                count += 1
     return render_template("index.html", recommendations=recommendations)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
