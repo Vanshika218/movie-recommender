@@ -10,8 +10,8 @@ from sklearn.metrics.pairwise import linear_kernel
 app = Flask(__name__)
 
 # Load and prepare data
-df = pd.read_csv('tmdb_5000_movies_subset.csv').head(1000)  # Limit to 1000 rows
-credits_df = pd.read_csv('tmdb_5000_credits_subset.csv').head(1000)
+df = pd.read_csv('tmdb_5000_movies.csv').head(1000)  # Limit to 1000 rows
+credits_df = pd.read_csv('tmdb_5000_credits.csv').head(1000)
 
 # Merge on movie ID
 df = movies_df.merge(credits_df, left_on='id', right_on='movie_id', how='inner')
