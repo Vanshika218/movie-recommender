@@ -10,8 +10,8 @@ from sklearn.metrics.pairwise import linear_kernel
 app = Flask(__name__)
 
 # Load and prepare data
-movies_df = pd.read_csv('tmdb_5000_movies.csv')
-credits_df = pd.read_csv('tmdb_5000_credits.csv')
+df = pd.read_csv('tmdb_5000_movies_subset.csv').head(1000)  # Limit to 1000 rows
+credits_df = pd.read_csv('tmdb_5000_credits_subset.csv').head(1000)
 
 # Merge on movie ID
 df = movies_df.merge(credits_df, left_on='id', right_on='movie_id', how='inner')
@@ -124,4 +124,5 @@ def home():
     return render_template("index.html", recommendations=recommendations)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 10000))  # Use Render's PORT or default to 10000
+    app.run(host="0.0.0.0", port=port, debug=True)
